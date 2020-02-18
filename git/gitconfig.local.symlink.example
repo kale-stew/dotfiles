@@ -1,0 +1,5 @@
+[user]
+        name = Your Name
+        email = name@email.com
+[credential]
+        helper = osxkeychain

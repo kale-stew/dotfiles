@@ -1,0 +1,35 @@
+# Local/private config goes in the include
+[include]
+        path = ~/.gitconfig.local
+
+[hub]
+        protocol = https
+
+[alias]
+        # Delete all local branches that have been merged into HEAD
+        dall = branch -d `git branch --merged | grep -v '^*' | grep -v 'master' | tr -d '\n'`
+
+        # shortcuts
+        co = checkout
+        c  = commit
+        s  = status -sb
+        b  = branch
+        a  = add
+        aa = add -A .
+        undo = reset --soft HEAD~1
+        aliases = config --get-regexp ^alias\\.
+        fo = fetch origin
+
+[mergetool]
+        keepBackup = false
+
+[branch "master"]
+        remote = origin
+        merge = refs/heads/master
+
+[help]
+        autocorrect = 0
+
+[user]
+	name = Kylie Stewart
+	email = kylieastewart@gmail.com
