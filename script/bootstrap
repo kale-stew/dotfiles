@@ -1,147 +1,117 @@
 #!/usr/bin/env bash
-
-cd "$(dirname "$0")/.."
-DOTFILES_ROOT=$(pwd -P)
+#
+# bootstrap — set up dotfiles on a fresh machine
+#
+# Usage:
+#   git clone https://github.com/kale-stew/dotfiles.git ~/.dotfiles
+#   cd ~/.dotfiles
+#   script/bootstrap
+#
+# What it does:
+#   1. Installs Homebrew (macOS) or stow via system package manager (Linux)
+#   2. Generates ~/.gitconfig.local from the example template if missing
+#   3. Symlinks all files in home/ into ~/ using GNU Stow
+#   4. Installs all packages and apps listed in Brewfile (macOS only)
 
 set -e
 
-echo ''
+DOTFILES_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 
-info() {
-  printf "\r  [ \033[00;34m..\033[0m ] $1\n"
-}
+info()    { printf "  [ \\033[00;34m..\\033[0m ] %s\\n" "$1"; }
+success() { printf "\\r\\033[2K  [ \\033[00;32mOK\\033[0m ] %s\\n" "$1"; }
+fail()    { printf "\\r\\033[2K  [\\033[0;31mFAIL\\033[0m] %s\\n" "$1"; exit 1; }
 
-user() {
-  printf "\r  [ \033[0;33m??\033[0m ] $1\n"
-}
+# ------------------------------------------------------------------
+# Homebrew (macOS)
+# ------------------------------------------------------------------
+install_homebrew() {
+  if ! command -v brew &>/dev/null; then
+    info "installing Homebrew"
+    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-success() {
-  printf "\r\033[2K  [ \033[00;32mOK\033[0m ] $1\n"
-}
-
-fail() {
-  printf "\r\033[2K  [\033[0;31mFAIL\033[0m] $1\n"
-  echo ''
-  exit
-}
-
-setup_gitconfig() {
-  if ! [ -f git/gitconfig.local.symlink ]; then
-    info 'setup gitconfig'
-
-    git_credential='cache'
-    if [ "$(uname -s)" == "Darwin" ]; then
-      git_credential='osxkeychain'
-    fi
-
-    user ' - What is your github author name?'
-    read -e git_authorname
-    user ' - What is your github author email?'
-    read -e git_authoremail
-
-    sed -e "s/AUTHORNAME/$git_authorname/g" -e "s/AUTHOREMAIL/$git_authoremail/g" -e "s/GIT_CREDENTIAL_HELPER/$git_credential/g" git/gitconfig.local.symlink.example >git/gitconfig.local.symlink
-
-    success 'gitconfig'
-  fi
-}
-
-link_file() {
-  local src=$1 dst=$2
-
-  local overwrite= backup= skip=
-  local action=
-
-  if [ -f "$dst" -o -d "$dst" -o -L "$dst" ]; then
-
-    if [ "$overwrite_all" == "false" ] && [ "$backup_all" == "false" ] && [ "$skip_all" == "false" ]; then
-
-      local currentSrc="$(readlink $dst)"
-
-      if [ "$currentSrc" == "$src" ]; then
-
-        skip=true
-
-      else
-
-        user "File already exists: $dst ($(basename "$src")), what do you want to do?\n\
-        [s]kip, [S]kip all, [o]verwrite, [O]verwrite all, [b]ackup, [B]ackup all?"
-        read -n 1 action
-
-        case "$action" in
-        o)
-          overwrite=true
-          ;;
-        O)
-          overwrite_all=true
-          ;;
-        b)
-          backup=true
-          ;;
-        B)
-          backup_all=true
-          ;;
-        s)
-          skip=true
-          ;;
-        S)
-          skip_all=true
-          ;;
-        *) ;;
-
-        esac
-
-      fi
-
-    fi
-
-    overwrite=${overwrite:-$overwrite_all}
-    backup=${backup:-$backup_all}
-    skip=${skip:-$skip_all}
-
-    if [ "$overwrite" == "true" ]; then
-      rm -rf "$dst"
-      success "removed $dst"
-    fi
-
-    if [ "$backup" == "true" ]; then
-      mv "$dst" "${dst}.backup"
-      success "moved $dst to ${dst}.backup"
-    fi
-
-    if [ "$skip" == "true" ]; then
-      success "skipped $src"
+    # Add brew to PATH for the remainder of this script
+    if [[ -x /opt/homebrew/bin/brew ]]; then
+      eval "$(/opt/homebrew/bin/brew shellenv)"
+    elif [[ -x /usr/local/bin/brew ]]; then
+      eval "$(/usr/local/bin/brew shellenv)"
     fi
   fi
+}
 
-  if [ "$skip" != "true" ]; then # "false" or empty
-    ln -s "$1" "$2"
-    success "linked $1 to $2"
+# ------------------------------------------------------------------
+# GNU Stow
+# ------------------------------------------------------------------
+ensure_stow() {
+  if command -v stow &>/dev/null; then
+    return
   fi
-}
 
-install_dotfiles() {
-  info 'installing dotfiles'
+  info "installing GNU Stow"
 
-  local overwrite_all=false backup_all=false skip_all=false
-
-  for src in $(find -H "$DOTFILES_ROOT" -maxdepth 2 -name '*.symlink' -not -path '*.git*'); do
-    dst="$HOME/.$(basename "${src%.*}")"
-    link_file "$src" "$dst"
-  done
-}
-
-setup_gitconfig
-install_dotfiles
-
-# If we're on a Mac, let's install and setup homebrew.
-if [ "$(uname -s)" == "Darwin" ]; then
-  info "installing dependencies"
-  if source bin/dot | while read -r data; do info "$data"; done; then
-    success "dependencies installed"
+  if [[ "$(uname -s)" == "Darwin" ]]; then
+    install_homebrew
+    brew install stow
+  elif command -v apt-get &>/dev/null; then
+    sudo apt-get update -qq && sudo apt-get install -y stow
+  elif command -v pacman &>/dev/null; then
+    sudo pacman -S --noconfirm stow
+  elif command -v dnf &>/dev/null; then
+    sudo dnf install -y stow
   else
-    fail "error installing dependencies"
+    fail "unsupported package manager — install stow manually: https://www.gnu.org/software/stow/"
   fi
-fi
 
-echo ''
-echo '  All installed!'
+  success "stow installed"
+}
+
+# ------------------------------------------------------------------
+# Local gitconfig
+# ------------------------------------------------------------------
+setup_gitconfig() {
+  if [[ -f "$DOTFILES_ROOT/git/gitconfig.local.symlink" ]]; then
+    return
+  fi
+
+  info "creating git/gitconfig.local.symlink"
+  cp "$DOTFILES_ROOT/git/gitconfig.local.symlink.example" \
+     "$DOTFILES_ROOT/git/gitconfig.local.symlink"
+  success "created — edit git/gitconfig.local.symlink with your name, email, and signing key"
+}
+
+# ------------------------------------------------------------------
+# Stow
+# ------------------------------------------------------------------
+link_dotfiles() {
+  info "linking dotfiles to ~/"
+  cd "$DOTFILES_ROOT"
+  stow -R home/
+  success "linked"
+}
+
+# ------------------------------------------------------------------
+# Homebrew bundle
+# ------------------------------------------------------------------
+install_packages() {
+  if [[ "$(uname -s)" != "Darwin" ]]; then
+    info "skipping Brewfile (not macOS)"
+    return
+  fi
+
+  install_homebrew
+
+  info "installing Homebrew packages"
+  cd "$DOTFILES_ROOT"
+  brew bundle --no-lock
+  success "packages installed"
+}
+
+# ------------------------------------------------------------------
+# Main
+# ------------------------------------------------------------------
+ensure_stow
+setup_gitconfig
+link_dotfiles
+install_packages
+
+echo ""
+echo "  Done! Restart your shell or run: source ~/.zshrc"
