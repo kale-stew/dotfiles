@@ -11,7 +11,8 @@
 #   1. Installs Homebrew (macOS) or stow via system package manager (Linux)
 #   2. Generates ~/.gitconfig.local from the example template if missing
 #   3. Symlinks all files in home/ into ~/ using GNU Stow
-#   4. Installs all packages and apps listed in Brewfile (macOS only)
+#   4. Symlinks git/ignore and git/attributes to ~/.config/git/
+#   5. Installs all packages and apps listed in Brewfile (macOS only)
 
 set -e
 
@@ -29,7 +30,6 @@ install_homebrew() {
     info "installing Homebrew"
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 
-    # Add brew to PATH for the remainder of this script
     if [[ -x /opt/homebrew/bin/brew ]]; then
       eval "$(/opt/homebrew/bin/brew shellenv)"
     elif [[ -x /usr/local/bin/brew ]]; then
@@ -83,9 +83,38 @@ setup_gitconfig() {
 # ------------------------------------------------------------------
 link_dotfiles() {
   info "linking dotfiles to ~/"
+
+  # Backup existing files that stow would conflict with
+  for target in "$HOME/.gitconfig" "$HOME/.zshrc"; do
+    if [[ -f "$target" && ! -L "$target" ]]; then
+      cp "$target" "${target}.backup"
+      rm "$target"
+      info "backed up $target to ${target}.backup"
+    fi
+  done
+
   cd "$DOTFILES_ROOT"
   stow -R home/
   success "linked"
+}
+
+# ------------------------------------------------------------------
+# XDG git config (~/.config/git/{ignore,attributes})
+# ------------------------------------------------------------------
+link_git_xdg() {
+  info "linking git XDG config to ~/.config/git/"
+
+  mkdir -p "$HOME/.config/git"
+
+  for file in ignore attributes; do
+    src="$DOTFILES_ROOT/git/$file"
+    dst="$HOME/.config/git/$file"
+    if [[ ! -L "$dst" ]]; then
+      ln -sf "$src" "$dst"
+    fi
+  done
+
+  success "git XDG config linked"
 }
 
 # ------------------------------------------------------------------
@@ -111,6 +140,7 @@ install_packages() {
 ensure_stow
 setup_gitconfig
 link_dotfiles
+link_git_xdg
 install_packages
 
 echo ""

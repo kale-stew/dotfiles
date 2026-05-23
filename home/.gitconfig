@@ -39,6 +39,4 @@
 [tag]
         gpgsign = true
 
-[user]
-        name = Kylie Stewart
-        email = kylieastewart@gmail.com
+

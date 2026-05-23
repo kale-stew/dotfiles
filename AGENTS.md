@@ -18,10 +18,9 @@ script/bootstrap
 ├── home/               # Stowed to ~/ via GNU Stow
 │   ├── .zshrc          # -> ~/.zshrc (sources all topic .zsh files)
 │   ├── .gitconfig      # -> ~/.gitconfig
-│   └── .config/
-│       ├── git/
-│       │   ├── ignore      # -> ~/.config/git/ignore (global gitignore)
-│       │   └── attributes  # -> ~/.config/git/attributes
+├── git/
+│   ├── ignore              # Linked to ~/.config/git/ignore by bootstrap
+│   └── attributes          # Linked to ~/.config/git/attributes by bootstrap
 ├── bin/                # Scripts added to $PATH
 ├── git/                # Git configuration (aliases, completions, local template)
 ├── zsh/                # Zsh configuration (aliases, completion, config, window title)
@@ -62,6 +61,8 @@ After sourcing all topics, it initializes:
   (git identity) — both are gitignored and must not be committed
 - **Symlinks**: Run `stow -R home/` from the repo root after adding files
   to `home/`. The `-R` flag restows and is idempotent.
+  Git XDG config files (`git/ignore`, `git/attributes`) are linked to
+  `~/.config/git/` by bootstrap separately (not through stow).
 - **New tools**: Add a topic directory with `.zsh` files (auto-sourced).
   If the tool needs `$PATH` changes, use `path.zsh`. If it needs
   completions, use `completion.zsh`. If it needs installation, add
@@ -87,6 +88,8 @@ After sourcing all topics, it initializes:
 - Don't commit secrets, tokens, or keys
 - Don't change the symlink mechanism (stow) without updating this file
 - Don't add files directly to ~/ — they'll be overwritten on next stow
+- Don't add `.config/` to `home/` for stow — it conflicts with existing
+  `~/.config` directories from other tools. Use bootstrap for these.
 
 ## Test
 

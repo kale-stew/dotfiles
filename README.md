@@ -25,8 +25,10 @@ After bootstrap completes, restart your shell or run `source ~/.zshrc`.
 1. Installs **GNU Stow** (via Homebrew on macOS, or apt/pacman/dnf on Linux)
 2. Creates `~/.dotfiles/git/gitconfig.local.symlink` from the example template
    if it doesn't exist — **edit this file with your name, email, and SSH signing key**
-3. Runs `stow -R home/` to symlink all config files into your home directory
-4. On macOS: installs Homebrew (if missing) and runs `brew bundle` to install
+3. Runs `stow -R home/` to symlink `.zshrc` and `.gitconfig` into your home directory
+4. Links `git/ignore` and `git/attributes` to `~/.config/git/` (outside stow to
+   avoid conflicts with existing `~/.config` directories from other tools)
+5. On macOS: installs Homebrew (if missing) and runs `brew bundle` to install
    all packages and applications listed in the Brewfile
 
 ### Post-install
@@ -125,12 +127,12 @@ Running `macos/set-defaults.sh` configures:
 
 ```
 ~/.dotfiles/
-├── home/                        # Stowed to ~/
+├── home/                        # Stowed to ~/ via GNU Stow
 │   ├── .zshrc                   # Shell entry point — sources all topics
-│   ├── .gitconfig               # Git configuration
-│   └── .config/git/
-│       ├── ignore               # Global gitignore patterns
-│       └── attributes           # Global gitattributes
+│   └── .gitconfig               # Git configuration
+├── git/
+│   ├── ignore                   # Linked to ~/.config/git/ignore by bootstrap
+│   └── attributes               # Linked to ~/.config/git/attributes by bootstrap
 ├── starship.toml                # Prompt configuration
 ├── Brewfile                     # Homebrew packages and apps
 ├── bin/                         # Scripts added to $PATH
