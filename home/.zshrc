@@ -36,6 +36,22 @@ if (( $+commands[starship] )); then
   source <(starship init zsh)
 fi
 
+# fzf — fuzzy finder history search and file navigation
+if [[ -f "$(brew --prefix)/opt/fzf/shell/completion.zsh" ]]; then
+  source "$(brew --prefix)/opt/fzf/shell/completion.zsh"
+  source "$(brew --prefix)/opt/fzf/shell/key-bindings.zsh"
+fi
+
+# zoxide — smart directory jumper
+if (( $+commands[zoxide] )); then
+  eval "$(zoxide init zsh)"
+fi
+
+# gh — GitHub CLI completions
+if (( $+commands[gh] )); then
+  source <(gh completion -s zsh)
+fi
+
 autoload -U up-line-or-beginning-search
 autoload -U down-line-or-beginning-search
 zle -N up-line-or-beginning-search
