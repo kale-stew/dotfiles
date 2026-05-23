@@ -70,7 +70,8 @@ After sourcing all topics, it initializes:
 - **Brewfile**: Add new Homebrew formulas/casks here. Run `brew bundle`
   to install them.
 - **Git**: All commits are signed via SSH (`gpg.format = ssh`). The git
-  config references `~/.gitconfig.local` for user identity overrides.
+  config includes `~/.gitconfig.local` for user identity overrides
+  (symlinked from `git/gitconfig.local.symlink` by bootstrap).
 
 ## Tech stack
 

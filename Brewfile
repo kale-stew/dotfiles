@@ -1,7 +1,5 @@
 cask_args appdir: '/Applications'
 
-tap 'homebrew/bundle'
-
 # Core CLI tools
 brew 'coreutils'
 brew 'git'

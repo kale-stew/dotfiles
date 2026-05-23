@@ -65,17 +65,21 @@ ensure_stow() {
 }
 
 # ------------------------------------------------------------------
-# Local gitconfig
+# Local gitconfig (~/.gitconfig.local)
 # ------------------------------------------------------------------
 setup_gitconfig() {
-  if [[ -f "$DOTFILES_ROOT/git/gitconfig.local.symlink" ]]; then
-    return
+  if [[ ! -f "$DOTFILES_ROOT/git/gitconfig.local.symlink" ]]; then
+    info "creating git/gitconfig.local.symlink"
+    cp "$DOTFILES_ROOT/git/gitconfig.local.symlink.example" \
+       "$DOTFILES_ROOT/git/gitconfig.local.symlink"
+    success "created — edit git/gitconfig.local.symlink with your name, email, and signing key"
   fi
 
-  info "creating git/gitconfig.local.symlink"
-  cp "$DOTFILES_ROOT/git/gitconfig.local.symlink.example" \
-     "$DOTFILES_ROOT/git/gitconfig.local.symlink"
-  success "created — edit git/gitconfig.local.symlink with your name, email, and signing key"
+  if [[ ! -L "$HOME/.gitconfig.local" ]]; then
+    info "linking ~/.gitconfig.local"
+    ln -sf "$DOTFILES_ROOT/git/gitconfig.local.symlink" "$HOME/.gitconfig.local"
+    success "linked"
+  fi
 }
 
 # ------------------------------------------------------------------
@@ -94,7 +98,7 @@ link_dotfiles() {
   done
 
   cd "$DOTFILES_ROOT"
-  stow -R home/
+  stow -R -t "$HOME" home/
   success "linked"
 }
 
@@ -130,7 +134,7 @@ install_packages() {
 
   info "installing Homebrew packages"
   cd "$DOTFILES_ROOT"
-  brew bundle --no-lock
+  brew bundle
   success "packages installed"
 }
 
