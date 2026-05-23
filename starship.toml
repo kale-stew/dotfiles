@@ -1,0 +1,44 @@
+# Starship configuration
+# https://starship.rs/config/
+
+format = """
+$username > $directory$git_branch$git_status
+$character"""
+
+right_format = "$nodejs"
+
+[username]
+style_user = "magenta"
+style_root = "red"
+format = "[$user]($style)"
+disabled = false
+show_always = true
+
+[directory]
+style = "cyan"
+format = "[$path]($style)"
+truncation_length = 1
+home_symbol = "🏠"
+substitutions = { "Developer" = "👩🏼‍💻", "personal" = "✨" }
+
+[git_branch]
+style = "green"
+format = " > [$branch]($style)"
+
+[git_status]
+conflicted = "✗"
+ahead = ""
+behind = ""
+diverged = ""
+staged = ""
+modified = ""
+renamed = ""
+deleted = ""
+untracked = ""
+
+[nodejs]
+format = "⬢ [$version]($style) "
+
+[character]
+success_symbol = "[›](bold green)"
+error_symbol = "[›](bold red)"

@@ -25,6 +25,17 @@ done
 
 unset config_files
 
+# Window title (defined in zsh/window.zsh)
+autoload -Uz add-zsh-hook
+_set_title_precmd() { title "zsh" "%m" "%55<...<%~" }
+add-zsh-hook precmd _set_title_precmd
+
+# Starship prompt
+export STARSHIP_CONFIG=$ZSH/starship.toml
+if (( $+commands[starship] )); then
+  source <(starship init zsh)
+fi
+
 autoload -U up-line-or-beginning-search
 autoload -U down-line-or-beginning-search
 zle -N up-line-or-beginning-search
