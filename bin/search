@@ -1,12 +1,13 @@
 #!/bin/sh
 #
 # Quick search in a directory for a string ($@).
-#
+# Uses ripgrep (rg) — respects .gitignore by default.
+
 set -e
 
-# use -iru to search directories ack usually ignores (like .git)
-if [ -x /usr/bin/ack-grep ]; then
-    ack-grep -i "$@"
+if command -v rg >/dev/null 2>&1; then
+    rg --smart-case "$@"
 else
-    ack -i "$@"
+    echo "ripgrep not found. Install: brew install ripgrep" >&2
+    exit 1
 fi
