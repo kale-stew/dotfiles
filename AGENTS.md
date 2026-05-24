@@ -81,6 +81,8 @@ After sourcing all topics, it initializes:
 - **Package manager**: Homebrew
 - **Symlink manager**: GNU Stow
 - **Git**: SSH-signed commits, `gh` CLI (no hub)
+- **Opencode skills**: Cloudflare platform skill installed globally
+  (`~/.config/opencode/skills/cloudflare/`). Use `/cloudflare` to load it.
 
 ## Anti-patterns to avoid
 

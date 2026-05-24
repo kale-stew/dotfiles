@@ -31,7 +31,7 @@
         enabled = true
 
 [gpg]
-        format = ssh
+	format = ssh
 
 [commit]
         gpgsign = true
@@ -40,3 +40,5 @@
         gpgsign = true
 
 
+[user]
+	signingkey = /Users/kski/.ssh/id_ed25519.pub
