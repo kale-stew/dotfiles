@@ -23,6 +23,9 @@ brew 'zoxide'
 # GitHub CLI
 brew 'gh'
 
+# AI coding agent
+brew 'opencode'
+
 # Mac App Store CLI
 brew 'mas'
 

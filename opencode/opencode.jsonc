@@ -1,0 +1,70 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": [
+    "When I provide a Notion URL, always use the Notion MCP to read the page content instead of webfetch.",
+    "My Notion workspace is connected via the notion MCP server - use it for any Notion links I share.",
+    "When writing PR summaries, keep them brief and scannable: use headers, bullet points, and include screenshots or visual references when possible.",
+    "When committing changes that touch only a single file, use the commit message convention '<file>++' (e.g., 'README.md++'). For multi-file changes, use a brief lowercase descriptive message."
+  ],
+  "agent": {
+    "design": {
+      "mode": "subagent",
+      "model": "anthropic/claude-sonnet-4-6",
+      "description": "Design engineer expert in CSS, HTML, JS/TS, shadcn/ui. Reviews screenshots, live URLs, and frontend code. Two modes: recommendations (default) and critical. Self-critique capable. Anti-AI-trope detection."
+    }
+  },
+  "attachment": {
+    "image": {
+      "auto_resize": true,
+      "max_width": 2560,
+      "max_height": 2560,
+      "max_base64_bytes": 8388608
+    }
+  },
+  "mcp": {
+    "notion": {
+      "type": "local",
+      "command": ["npx", "-y", "@notionhq/notion-mcp-server"],
+      "environment": {
+        "OPENAPI_MCP_HEADERS": "{\"Authorization\": \"Bearer {env:NOTION_API_KEY}\", \"Notion-Version\": \"2022-06-28\"}"
+      },
+      "enabled": true
+    },
+    "google-calendar-konline": {
+      "type": "local",
+      "command": ["npx", "-y", "@cocal/google-calendar-mcp"],
+      "environment": {
+        "GOOGLE_OAUTH_CREDENTIALS": "{env:HOME}/.config/opencode/gcp-oauth.keys.json"
+      },
+      "enabled": true
+    },
+    "google-calendar-gmail": {
+      "type": "local",
+      "command": ["npx", "-y", "@cocal/google-calendar-mcp"],
+      "environment": {
+        "GOOGLE_OAUTH_CREDENTIALS": "{env:HOME}/.config/opencode/gcp-oauth-personal.keys.json",
+        "GOOGLE_CALENDAR_MCP_TOKEN_PATH": "{env:HOME}/.config/google-calendar-mcp/tokens-personal.json"
+      },
+      "enabled": true
+    },
+    "photos-api": {
+      "type": "local",
+      "command": ["node", "/Users/kski/Developer/photos-api/mcp-server/dist/index.js"],
+      "environment": {
+        "PHOTOS_API_URL": "http://localhost:8787",
+        "CLOUDFLARE_ACCOUNT_ID": "{env:CLOUDFLARE_ACCOUNT_ID}",
+        "CF_WORKERS_AI_API_TOKEN": "{env:CF_WORKERS_AI_API_TOKEN}",
+        "CF_ACCESS_TOKEN": "{env:CF_ACCESS_TOKEN}"
+      },
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp"],
+      "environment": {
+        "BROWSER": "chromium"
+      },
+      "enabled": true
+    }
+  }
+}

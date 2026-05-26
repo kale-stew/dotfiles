@@ -48,7 +48,7 @@ if (( $+commands[zoxide] )); then
 fi
 
 # gh — GitHub CLI completions
-if (( $+commands[gh] )); then
+if (( $+commands[gh] )) && gh --version 2>/dev/null | grep -q "github.com/cli/cli"; then
   source <(gh completion -s zsh)
 fi
 
