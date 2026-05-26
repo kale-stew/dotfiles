@@ -38,3 +38,6 @@
 
 [tag]
         gpgsign = true
+
+[user]
+	signingkey = /Users/kski/.ssh/id_ed25519

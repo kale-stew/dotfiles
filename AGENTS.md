@@ -99,8 +99,15 @@ After sourcing all topics, it initializes:
 - **Package manager**: Homebrew
 - **Symlink manager**: GNU Stow
 - **Git**: SSH-signed commits, `gh` CLI (no hub)
-- **Opencode skills**: Cloudflare platform skill installed globally
-  (`~/.config/opencode/skills/cloudflare/`). Use `/cloudflare` to load it.
+
+## Opencode
+
+Opencode configuration lives in a separate private repository and is installed
+by `script/bootstrap`. The bootstrap script clones the private repo and runs
+its install script to symlink config into `~/.config/opencode/`.
+
+If you don't have access to the private repo, bootstrap will skip this step
+and opencode will use default settings.
 
 ## Anti-patterns to avoid
 

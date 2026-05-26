@@ -139,6 +139,33 @@ install_packages() {
 }
 
 # ------------------------------------------------------------------
+# Opencode config (private repo)
+# ------------------------------------------------------------------
+install_opencode() {
+  local opencode_repo="git@github.com:kale-stew/opencode-config.git"
+  local opencode_dir="$HOME/Developer/opencode-config"
+
+  if [[ -d "$opencode_dir" ]]; then
+    info "opencode-config already exists, pulling latest"
+    git -C "$opencode_dir" pull --ff-only 2>/dev/null || true
+  else
+    info "cloning opencode-config (private repo)"
+    if git clone "$opencode_repo" "$opencode_dir" 2>/dev/null; then
+      success "opencode-config cloned"
+    else
+      info "skipping opencode-config (no access to private repo)"
+      return
+    fi
+  fi
+
+  if [[ -x "$opencode_dir/install.sh" ]]; then
+    info "installing opencode config"
+    "$opencode_dir/install.sh"
+    success "opencode config installed"
+  fi
+}
+
+# ------------------------------------------------------------------
 # Main
 # ------------------------------------------------------------------
 ensure_stow
@@ -146,6 +173,7 @@ setup_gitconfig
 link_dotfiles
 link_git_xdg
 install_packages
+install_opencode
 
 echo ""
 echo "  Done! Restart your shell or run: source ~/.zshrc"
