@@ -26,5 +26,7 @@
   "github.gitProtocol": "ssh",
   "typescript.updateImportsOnFileMove.enabled": "always",
   "javascript.updateImportsOnFileMove.enabled": "always",
-  "npm.packageManager": "npm"
+  "npm.packageManager": "npm",
+  "git.path": "/Users/kczajkowski/.git-ai/bin/git",
+  "chat.useHooks": true
 }

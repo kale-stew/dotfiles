@@ -26,6 +26,11 @@ brew 'gh'
 # AI coding agent
 brew 'opencode'
 
+# GIF creation
+brew 'ffmpeg'
+brew 'gifski'
+brew 'gifsicle'
+
 # Mac App Store CLI
 brew 'mas'
 

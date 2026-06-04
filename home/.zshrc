@@ -58,3 +58,12 @@ zle -N up-line-or-beginning-search
 zle -N down-line-or-beginning-search
 bindkey "^[[A" up-line-or-beginning-search
 bindkey "^[[B" down-line-or-beginning-search
+
+# Added by git-ai installer on Tue May 26 08:28:46 PDT 2026
+export PATH="/Users/kczajkowski/.git-ai/bin:$PATH"
+
+# Jira CLI token lives in ~/.localrc (never commit secrets to this public repo)
+
+alias pb='git fetch --prune && git for-each-ref --format "%(refname:short) %(upstream:track)" refs/heads | awk "/\[gone\]/ {print \$1}" | xargs git branch -D'
+
+# NPM_TOKEN (Cloudflare internal registry) lives in ~/.localrc
