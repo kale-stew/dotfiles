@@ -60,7 +60,7 @@ bindkey "^[[A" up-line-or-beginning-search
 bindkey "^[[B" down-line-or-beginning-search
 
 # Added by git-ai installer on Tue May 26 08:28:46 PDT 2026
-export PATH="/Users/kczajkowski/.git-ai/bin:$PATH"
+export PATH="$HOME/.git-ai/bin:$PATH"
 
 # Jira CLI token lives in ~/.localrc (never commit secrets to this public repo)
 
