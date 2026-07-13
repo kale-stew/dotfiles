@@ -26,6 +26,9 @@ brew 'gh'
 # AI coding agent
 brew 'opencode'
 
+# Local open-weight model runtime (personal harness ollama-local tier)
+brew 'ollama'
+
 # GIF creation
 brew 'ffmpeg'
 brew 'gifski'
