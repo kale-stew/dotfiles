@@ -1,0 +1,6 @@
+[user]
+	name = Kylie
+	email = kylie@example.com
+	signingkey = ~/.ssh/id_ed25519
+[credential]
+	helper = osxkeychain

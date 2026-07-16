@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+#
+# Pre-commit: Class-A deterministic gates for a PUBLIC dotfiles repo.
+# Enable once per clone with:  git config core.hooksPath .githooks
+#
+set -euo pipefail
+HOOK_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+GATE="$HOOK_DIR/../gates/gate.sh"
+if [[ -x "$GATE" ]]; then
+  if ! "$GATE" --staged; then
+    echo ""
+    echo "Class-A gate failed. Secrets belong in ~/.localrc; never commit tokens to this public repo."
+    exit 1
+  fi
+fi
+exit 0

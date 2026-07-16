@@ -1,3 +1,8 @@
 git/gitconfig.local.symlink
 # .opencode/*
 # opencode/
+
+# Secrets + private artifacts — never commit to this PUBLIC repo (see gates/)
+.localrc
+scripts/.mined/
+corrections.jsonl
