@@ -9,6 +9,10 @@ G=./gate.sh
 pass=0; fail=0
 chk(){ if eval "$2"; then echo "✓ $1"; pass=$((pass+1)); else echo "✗ $1"; fail=$((fail+1)); fi; }
 
+# Guard: a deleted green fixture would make the green cases pass VACUOUSLY (gate.sh
+# returns 0 on a missing file). Fail loudly instead of reporting a false clean.
+chk "fixtures: committed green fixtures present" "[ -f fixtures/green/gitconfig ] && [ -f fixtures/green/clean.diff ]"
+
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 
 # --- D2 gitconfig sanity (file mode + diff mode). Diff mode regressed once: the
@@ -23,6 +27,10 @@ printf '[url "https://%s:%s%s%s/"]\n\tinsteadOf = gh:\n' 'kylie' 'supersecretpw'
 chk "D2 red: helper=store (file) fires" "$G --gitconfig \"$TMP/gitconfig-store\" >/dev/null 2>&1; [ \$? -eq 1 ]"
 chk "D2 red: url creds (file) fire"     "$G --gitconfig \"$TMP/gitconfig-urlcreds\" >/dev/null 2>&1; [ \$? -eq 1 ]"
 chk "D2 red: helper=store (diff) fires" "$G --diff \"$TMP/gitconfig-store.diff\" >/dev/null 2>&1; [ \$? -eq 1 ]"
+{ echo 'diff --git a/home/.gitconfig b/home/.gitconfig'; echo '--- a/home/.gitconfig'; \
+  echo '+++ b/home/.gitconfig'; echo '@@ -0,0 +1 @@'; \
+  printf '+[url "https://%s:%s%s%s/"]\n' 'kylie' 'supersecretpw' '@' 'github.com'; } > "$TMP/gitconfig-urlcreds.diff"
+chk "D2 red: url creds (diff) fires"    "$G --diff \"$TMP/gitconfig-urlcreds.diff\" >/dev/null 2>&1; [ \$? -eq 1 ]"
 chk "D2 green: osxkeychain passes"      "$G --gitconfig fixtures/green/gitconfig >/dev/null 2>&1"
 
 # --- D3 private-artifact path (reuse committed green clean.diff for the negative) ---
