@@ -66,4 +66,4 @@ export PATH="$HOME/.git-ai/bin:$PATH"
 
 alias pb='git fetch --prune && git for-each-ref --format "%(refname:short) %(upstream:track)" refs/heads | awk "/\[gone\]/ {print \$1}" | xargs git branch -D'
 
-# NPM_TOKEN (Cloudflare internal registry) lives in ~/.localrc
+# Run load-cloudflare-npm-token before an internal registry install.
