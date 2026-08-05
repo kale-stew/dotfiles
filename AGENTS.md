@@ -55,6 +55,24 @@ After sourcing all topics, it initializes:
 - gh completion
 - History search bindings (up/down arrow)
 
+## Scripts
+
+- **`git clean-stale`** (`bin/git-clean-stale`): sweeps stale local branches and
+  their worktrees across one or more repos. **Dry-run by default** — nothing is
+  deleted without `--execute`, so it is safe for humans and agents to run blindly.
+  - Classifies branches: `gone` (upstream deleted), `merged`, `local-backup`,
+    `unpushed`, `old`, `active`, `protected`. Auto-deletes `gone`/`merged`/
+    `local-backup`; skips `unpushed`/`old` unless `--include-unpushed`/`--include-old`.
+    Never touches integration branches, current HEAD, or kept worktrees.
+  - Removes the worktree for any branch it deletes (dirty worktrees skipped
+    unless `--force`).
+  - Agent-friendly: `--json` for machine-readable output, `--yes` to skip prompts.
+  - Repo list precedence: positional args → `--repos-file` → `$GIT_CLEAN_STALE_REPOS`
+    → cwd. The repo set is user/host-specific and lives in `~/.localrc`
+    (gitignored) as `$GIT_CLEAN_STALE_REPOS` — never hardcode repo paths here.
+  - Examples: `git clean-stale` (dry-run all), `git clean-stale --json`,
+    `git clean-stale --execute --yes`, `git clean-stale --include-old --days 90`.
+
 ## Conventions
 
 - **Private config**: `~/.localrc` (shell env vars) and `~/.gitconfig.local`

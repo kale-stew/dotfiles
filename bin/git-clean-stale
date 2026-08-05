@@ -1,0 +1,374 @@
+#!/usr/bin/env bash
+#
+# git-clean-stale — sweep stale local branches (and their worktrees) across repos.
+#
+# Dry-run by default. Safe for you AND an agent to run blindly: nothing is
+# deleted without --execute. Repo-specific paths live ONLY in ~/.localrc via
+# $GIT_CLEAN_STALE_REPOS — this script is generic and safe for the PUBLIC repo.
+#
+# Classification per local branch:
+#   protected     integration branches, current HEAD, kept worktrees, --protect
+#   gone          upstream tracking branch deleted upstream ([gone])   -> delete
+#   merged        reachable from an integration branch                 -> delete
+#   local-backup  no upstream + matches backup glob                    -> delete
+#   unpushed      ahead of upstream, or never-pushed with commits      -> skip*
+#   old           committed older than --days, remote still live       -> skip*
+#   active        recent, live remote                                  -> keep
+#   (* deleted only with --include-unpushed / --include-old)
+#
+# Usage:
+#   git clean-stale [options] [repo-path...]
+#
+#   --execute            actually delete (default: dry-run)
+#   --yes                skip interactive confirmation
+#   --json               machine-readable output (implies --no-fetch prompt-free)
+#   --days N             old-by-date threshold in days (default 60)
+#   --integration LIST   comma list of integration branches
+#                        (default: auto-detect from staging,main,master)
+#   --include-old        also delete old-by-date branches (live remotes)
+#   --include-unpushed   also delete branches with unpushed/never-pushed commits
+#   --no-fetch           skip `git fetch --all --prune`
+#   --force              remove dirty worktrees during teardown
+#   --protect GLOB       extra never-delete branch glob (repeatable)
+#   --backup-glob GLOB   local-backup match glob (repeatable;
+#                        default: backup/* and *pre-rebase*)
+#   --repos-file PATH    file of repo paths (newline/space separated)
+#   -n, --dry-run        explicit dry-run (default)
+#   -h, --help           show this help
+#
+# Repo selection precedence:
+#   positional args -> --repos-file -> $GIT_CLEAN_STALE_REPOS -> current dir
+#
+# Examples:
+#   git clean-stale                      # dry-run over $GIT_CLEAN_STALE_REPOS
+#   git clean-stale --execute --yes      # delete safe stale branches, no prompt
+#   git clean-stale --json ~/Developer/stratus
+#   git clean-stale --include-old --days 90 --execute
+
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# defaults
+# ---------------------------------------------------------------------------
+EXECUTE=0
+ASSUME_YES=0
+JSON=0
+DAYS=60
+INTEGRATION_OVERRIDE=""
+INCLUDE_OLD=0
+INCLUDE_UNPUSHED=0
+DO_FETCH=1
+FORCE=0
+REPOS_FILE=""
+PROTECT_GLOBS=()
+BACKUP_GLOBS=("backup/*" "*pre-rebase*")
+POSITIONAL=()
+
+# ANSI (only when stdout is a tty and not JSON)
+if [ -t 1 ] && [ "${NO_COLOR:-}" = "" ]; then
+  C_RED=$'\033[31m'; C_GRN=$'\033[32m'; C_YEL=$'\033[33m'
+  C_BLU=$'\033[34m'; C_DIM=$'\033[2m'; C_BLD=$'\033[1m'; C_RST=$'\033[0m'
+else
+  C_RED=""; C_GRN=""; C_YEL=""; C_BLU=""; C_DIM=""; C_BLD=""; C_RST=""
+fi
+
+usage() { sed -n '2,50p' "$0" | sed 's/^# \{0,1\}//'; exit "${1:-0}"; }
+
+die() { printf '%sgit-clean-stale: %s%s\n' "$C_RED" "$*" "$C_RST" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------
+# arg parsing
+# ---------------------------------------------------------------------------
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --execute) EXECUTE=1 ;;
+    --yes|-y) ASSUME_YES=1 ;;
+    --json) JSON=1 ;;
+    --days) shift; DAYS="${1:-}"; [ -n "$DAYS" ] || die "--days needs a value" ;;
+    --integration) shift; INTEGRATION_OVERRIDE="${1:-}" ;;
+    --include-old) INCLUDE_OLD=1 ;;
+    --include-unpushed) INCLUDE_UNPUSHED=1 ;;
+    --no-fetch) DO_FETCH=0 ;;
+    --force) FORCE=1 ;;
+    --protect) shift; [ -n "${1:-}" ] || die "--protect needs a glob"; PROTECT_GLOBS+=("$1") ;;
+    --backup-glob) shift; [ -n "${1:-}" ] || die "--backup-glob needs a glob"; BACKUP_GLOBS+=("$1") ;;
+    --repos-file) shift; REPOS_FILE="${1:-}" ;;
+    -n|--dry-run) EXECUTE=0 ;;
+    -h|--help) usage 0 ;;
+    --) shift; while [ $# -gt 0 ]; do POSITIONAL+=("$1"); shift; done; break ;;
+    -*) die "unknown option: $1 (see --help)" ;;
+    *) POSITIONAL+=("$1") ;;
+  esac
+  shift
+done
+
+case "$DAYS" in *[!0-9]*) die "--days must be an integer" ;; esac
+
+# ---------------------------------------------------------------------------
+# resolve repo list
+# ---------------------------------------------------------------------------
+REPOS=()
+if [ "${#POSITIONAL[@]}" -gt 0 ]; then
+  REPOS=("${POSITIONAL[@]}")
+elif [ -n "$REPOS_FILE" ]; then
+  [ -f "$REPOS_FILE" ] || die "--repos-file not found: $REPOS_FILE"
+  # shellcheck disable=SC2207
+  REPOS=($(tr '\n' ' ' < "$REPOS_FILE"))
+elif [ -n "${GIT_CLEAN_STALE_REPOS:-}" ]; then
+  # shellcheck disable=SC2206
+  REPOS=(${GIT_CLEAN_STALE_REPOS})
+else
+  REPOS=(".")
+fi
+
+[ "${#REPOS[@]}" -gt 0 ] || die "no repos to process"
+
+# ---------------------------------------------------------------------------
+# helpers
+# ---------------------------------------------------------------------------
+now_epoch=$(date +%s)
+cutoff_epoch=$(( now_epoch - DAYS * 86400 ))
+
+json_escape() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
+
+matches_any() {
+  local name="$1"; shift
+  local glob
+  for glob in "$@"; do
+    # shellcheck disable=SC2053
+    [[ "$name" == $glob ]] && return 0
+  done
+  return 1
+}
+
+# Look up the worktree path for a branch in the current repo's WT_MAP
+# (tab-separated "branch<TAB>path" lines). bash 3.2 compatible — no assoc arrays.
+# Relies on dynamic scoping: WT_MAP is a `local` in the calling process_repo.
+wt_lookup() {
+  local target="$1" bn bp
+  while IFS=$'\t' read -r bn bp; do
+    [ "$bn" = "$target" ] && { printf '%s' "$bp"; return; }
+  done <<EOF
+$WT_MAP
+EOF
+  return 0
+}
+
+# Totals for final summary
+TOTAL_DELETED=0
+TOTAL_WOULD=0
+TOTAL_SKIPPED=0
+TOTAL_WT=0
+
+# ---------------------------------------------------------------------------
+# per-repo processing
+# ---------------------------------------------------------------------------
+process_repo() {
+  local repo="$1"
+  local abs
+  abs=$(cd "$repo" 2>/dev/null && pwd -P) || { printf '%s! skip (not a dir): %s%s\n' "$C_YEL" "$repo" "$C_RST" >&2; return; }
+
+  if ! git -C "$abs" rev-parse --git-dir >/dev/null 2>&1; then
+    printf '%s! skip (not a git repo): %s%s\n' "$C_YEL" "$abs" "$C_RST" >&2
+    return
+  fi
+
+  if [ "$JSON" -eq 0 ]; then
+    printf '\n%s%s==== %s ====%s\n' "$C_BLD" "$C_BLU" "$abs" "$C_RST"
+  fi
+
+  if [ "$DO_FETCH" -eq 1 ]; then
+    [ "$JSON" -eq 0 ] && printf '%s› fetch --all --prune%s\n' "$C_DIM" "$C_RST"
+    git -C "$abs" fetch --all --prune >/dev/null 2>&1 || \
+      printf '%s! fetch failed (offline?), using cached refs%s\n' "$C_YEL" "$C_RST" >&2
+  fi
+
+  # integration branches that actually exist locally
+  local candidates
+  if [ -n "$INTEGRATION_OVERRIDE" ]; then
+    candidates=${INTEGRATION_OVERRIDE//,/ }
+  else
+    candidates="staging main master"
+  fi
+  local INTEG=()
+  local b
+  for b in $candidates; do
+    if git -C "$abs" show-ref --verify --quiet "refs/heads/$b"; then
+      INTEG+=("$b")
+    fi
+  done
+
+  local current_branch
+  current_branch=$(git -C "$abs" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "")
+
+  # map branch -> worktree path as tab-separated lines (bash 3.2: no assoc arrays)
+  local WT_MAP="" wt_line wt_dir="" wt_branch=""
+  while IFS= read -r wt_line; do
+    case "$wt_line" in
+      "worktree "*) wt_dir="${wt_line#worktree }" ;;
+      "branch "*)
+        wt_branch="${wt_line#branch }"
+        wt_branch="${wt_branch#refs/heads/}"
+        WT_MAP="${WT_MAP}${wt_branch}	${wt_dir}
+"
+        ;;
+      "") wt_dir=""; wt_branch="" ;;
+    esac
+  done < <(git -C "$abs" worktree list --porcelain)
+
+  # branches to act on, collected then executed
+  local del_names=() del_reasons=() del_wt=()
+
+  # iterate local branches with metadata
+  local line
+  while IFS='|' read -r name track upstream cdate; do
+    [ -n "$name" ] || continue
+
+    local reason="" action="keep" wtpath=""
+    wtpath=$(wt_lookup "$name")
+
+    # protected: integration, current HEAD, explicit protect globs
+    local is_integ=0 ib
+    for ib in "${INTEG[@]}"; do [ "$name" = "$ib" ] && is_integ=1; done
+
+    if [ "$is_integ" -eq 1 ] || [ "$name" = "$current_branch" ] || \
+       { [ "${#PROTECT_GLOBS[@]}" -gt 0 ] && matches_any "$name" "${PROTECT_GLOBS[@]}"; }; then
+      reason="protected"; action="keep"
+    else
+      # ahead? (unpushed commits) — read from track string like [ahead 1, behind 2]
+      local ahead=0
+      case "$track" in *ahead*) ahead=1 ;; esac
+
+      # merged into an integration branch?
+      local merged=0
+      for ib in "${INTEG[@]}"; do
+        if git -C "$abs" merge-base --is-ancestor "refs/heads/$name" "refs/heads/$ib" 2>/dev/null; then
+          merged=1; break
+        fi
+      done
+
+      if [ -z "$upstream" ]; then
+        # no upstream: local-only branch
+        if matches_any "$name" "${BACKUP_GLOBS[@]}"; then
+          reason="local-backup"; action="delete"
+        elif [ "$merged" -eq 1 ]; then
+          reason="merged"; action="delete"
+        else
+          reason="unpushed"; action="skip"
+          [ "$INCLUDE_UNPUSHED" -eq 1 ] && action="delete"
+        fi
+      elif [[ "$track" == *"[gone]"* ]] || [[ "$track" == *"gone"* ]]; then
+        reason="gone"; action="delete"
+      elif [ "$merged" -eq 1 ]; then
+        reason="merged"; action="delete"
+      elif [ "$ahead" -eq 1 ]; then
+        reason="unpushed"; action="skip"
+        [ "$INCLUDE_UNPUSHED" -eq 1 ] && action="delete"
+      elif [ -n "$cdate" ] && [ "$cdate" -lt "$cutoff_epoch" ]; then
+        reason="old"; action="skip"
+        [ "$INCLUDE_OLD" -eq 1 ] && action="delete"
+      else
+        reason="active"; action="keep"
+      fi
+    fi
+
+    if [ "$JSON" -eq 1 ]; then
+      printf '{"repo":"%s","branch":"%s","class":"%s","action":"%s","worktree":"%s"}\n' \
+        "$(json_escape "$abs")" "$(json_escape "$name")" "$reason" "$action" "$(json_escape "$wtpath")"
+    else
+      local color="$C_DIM"
+      case "$action" in
+        delete) color="$C_RED" ;;
+        skip)   color="$C_YEL" ;;
+        keep)   [ "$reason" = "protected" ] && color="$C_GRN" || color="$C_DIM" ;;
+      esac
+      local wtnote=""
+      [ -n "$wtpath" ] && wtnote=" ${C_DIM}(worktree: $wtpath)${C_RST}"
+      printf '  %s%-8s%s %-12s %s%s\n' "$color" "$action" "$C_RST" "$reason" "$name" "$wtnote"
+    fi
+
+    if [ "$action" = "delete" ]; then
+      del_names+=("$name"); del_reasons+=("$reason"); del_wt+=("$wtpath")
+    elif [ "$action" = "skip" ]; then
+      TOTAL_SKIPPED=$((TOTAL_SKIPPED + 1))
+    fi
+  done < <(
+    git -C "$abs" for-each-ref --sort=committerdate \
+      --format='%(refname:short)|%(upstream:short)|%(upstream:track)|%(committerdate:unix)' \
+      refs/heads/ | \
+    while IFS='|' read -r n up tr cd; do
+      # reorder so track carries the [gone]/ahead info; keep fields stable
+      printf '%s|%s|%s|%s\n' "$n" "$tr" "$up" "$cd"
+    done
+  )
+
+  # nothing to delete
+  if [ "${#del_names[@]}" -eq 0 ]; then
+    [ "$JSON" -eq 0 ] && printf '%s  nothing to delete%s\n' "$C_DIM" "$C_RST"
+    return
+  fi
+
+  # confirmation (skip in json or with --yes or in dry-run)
+  if [ "$EXECUTE" -eq 1 ] && [ "$ASSUME_YES" -eq 0 ] && [ "$JSON" -eq 0 ]; then
+    printf '%sDelete %d branch(es) above in %s? [y/N] %s' "$C_BLD" "${#del_names[@]}" "$abs" "$C_RST"
+    local ans; read -r ans </dev/tty || ans=""
+    case "$ans" in y|Y|yes|YES) ;; *) printf '%s  aborted%s\n' "$C_YEL" "$C_RST"; TOTAL_SKIPPED=$((TOTAL_SKIPPED + ${#del_names[@]})); return ;; esac
+  fi
+
+  # perform deletions
+  local i
+  for i in "${!del_names[@]}"; do
+    local name="${del_names[$i]}" reason="${del_reasons[$i]}" wtpath="${del_wt[$i]}"
+
+    if [ "$EXECUTE" -eq 0 ]; then
+      TOTAL_WOULD=$((TOTAL_WOULD + 1))
+      [ -n "$wtpath" ] && TOTAL_WT=$((TOTAL_WT + 1))
+      continue
+    fi
+
+    # teardown worktree first
+    if [ -n "$wtpath" ]; then
+      local dirty=""
+      dirty=$(git -C "$wtpath" status --porcelain 2>/dev/null || echo "")
+      if [ -n "$dirty" ] && [ "$FORCE" -eq 0 ]; then
+        printf '%s  ! %s: worktree dirty, skipping (use --force): %s%s\n' "$C_YEL" "$name" "$wtpath" "$C_RST" >&2
+        TOTAL_SKIPPED=$((TOTAL_SKIPPED + 1))
+        continue
+      fi
+      if [ -n "$dirty" ]; then
+        git -C "$abs" worktree remove --force "$wtpath" || { printf '%s  ! failed to remove worktree %s%s\n' "$C_RED" "$wtpath" "$C_RST" >&2; continue; }
+      else
+        git -C "$abs" worktree remove "$wtpath" || { printf '%s  ! failed to remove worktree %s%s\n' "$C_RED" "$wtpath" "$C_RST" >&2; continue; }
+      fi
+      TOTAL_WT=$((TOTAL_WT + 1))
+      printf '%s  - removed worktree %s%s\n' "$C_DIM" "$wtpath" "$C_RST"
+    fi
+
+    # -D because gone/old/unpushed may not be merged into current HEAD
+    if git -C "$abs" branch -D "$name" >/dev/null 2>&1; then
+      printf '%s  - deleted %s%s (%s)\n' "$C_GRN" "$name" "$C_RST" "$reason"
+      TOTAL_DELETED=$((TOTAL_DELETED + 1))
+    else
+      printf '%s  ! failed to delete %s%s\n' "$C_RED" "$name" "$C_RST" >&2
+    fi
+  done
+}
+
+# ---------------------------------------------------------------------------
+# main
+# ---------------------------------------------------------------------------
+for repo in "${REPOS[@]}"; do
+  process_repo "$repo"
+done
+
+if [ "$JSON" -eq 0 ]; then
+  printf '\n%s%s==== summary ====%s\n' "$C_BLD" "$C_BLU" "$C_RST"
+  if [ "$EXECUTE" -eq 1 ]; then
+    printf '  deleted %d branch(es), removed %d worktree(s), skipped %d\n' \
+      "$TOTAL_DELETED" "$TOTAL_WT" "$TOTAL_SKIPPED"
+  else
+    printf '  %sdry-run%s: would delete %d branch(es), tear down %d worktree(s), skip %d\n' \
+      "$C_YEL" "$C_RST" "$TOTAL_WOULD" "$TOTAL_WT" "$TOTAL_SKIPPED"
+    printf '  %srun with --execute to apply%s\n' "$C_DIM" "$C_RST"
+  fi
+fi

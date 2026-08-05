@@ -64,6 +64,11 @@ export PATH="$HOME/.git-ai/bin:$PATH"
 
 # Jira CLI token lives in ~/.localrc (never commit secrets to this public repo)
 
-alias pb='git fetch --prune && git for-each-ref --format "%(refname:short) %(upstream:track)" refs/heads | awk "/\[gone\]/ {print \$1}" | xargs git branch -D'
+# pb = prune stale branches AND their worktrees in the CURRENT repo.
+# Delegates to `git clean-stale` (dry-run-first classifier, tears down gone/merged
+# worktrees, confirms before deleting, skips unpushed/active). One code path.
+pb() { git clean-stale --execute "${PWD}"; }
+# pball = sweep every repo in $GIT_CLEAN_STALE_REPOS (set in ~/.localrc).
+alias pball='git clean-stale --execute'
 
 # Run load-cloudflare-npm-token before an internal registry install.
