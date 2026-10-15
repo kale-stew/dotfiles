@@ -104,10 +104,10 @@ After sourcing all topics, it initializes:
 
 Opencode configuration lives in a separate private repository and is installed
 by `script/bootstrap`. The bootstrap script clones the private repo and runs
-its install script to symlink config into `~/.config/opencode/`.
+its install script to build the isolated personal profile and install `ocp`.
 
 If you don't have access to the private repo, bootstrap will skip this step
-and opencode will use default settings.
+and leave OpenCode unconfigured.
 
 ## Anti-patterns to avoid
 
